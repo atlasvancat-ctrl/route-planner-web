@@ -14,19 +14,56 @@ let directionsService;
 let elevationService;
 
 // =========================
+// DOM ELEMENTS
+// =========================
+let waypointsListEl;
+let addWaypointBtn;
+let buildRouteBtn;
+let editWaypointsBtn;
+let waypointsSection;
+let routeSection;
+let summaryEl;
+let mapEl;
+let chartCanvas;
+
+// =========================
+// INIT
+// =========================
+document.addEventListener("DOMContentLoaded", () => {
+  waypointsListEl = document.getElementById("waypoints-list");
+  addWaypointBtn = document.getElementById("add-waypoint-btn");
+  buildRouteBtn = document.getElementById("build-route-btn");
+  editWaypointsBtn = document.getElementById("edit-waypoints-btn");
+  waypointsSection = document.getElementById("waypoints-section");
+  routeSection = document.getElementById("route-section");
+  summaryEl = document.getElementById("summary");
+  mapEl = document.getElementById("map");
+  chartCanvas = document.getElementById("elevation-chart");
+
+  // Initialize with two waypoints
+  waypoints = [{ value: "" }, { value: "" }];
+  renderWaypoints();
+
+  addWaypointBtn.addEventListener("click", () => {
+    waypoints.push({ value: "" });
+    renderWaypoints();
+  });
+
+  buildRouteBtn.addEventListener("click", buildRoute);
+  editWaypointsBtn.addEventListener("click", () => {
+    routeSection.style.display = "none";
+    waypointsSection.style.display = "block";
+  });
+
+  // Init map when Google script loads
+  window.initMap = initMapAndServices;
+});
+
+// =========================
 // WAYPOINT UI
 // =========================
-const waypointsListEl = document.getElementById("waypoints-list");
-const addWaypointBtn = document.getElementById("add-waypoint-btn");
-const buildRouteBtn = document.getElementById("build-route-btn");
-const editWaypointsBtn = document.getElementById("edit-waypoints-btn");
-const waypointsSection = document.getElementById("waypoints-section");
-const routeSection = document.getElementById("route-section");
-const summaryEl = document.getElementById("summary");
-const mapEl = document.getElementById("map");
-const chartCanvas = document.getElementById("elevation-chart");
-
 function renderWaypoints() {
+  if (!waypointsListEl) return;
   waypointsListEl.innerHTML = "";
   waypoints.forEach((wp, idx) => {
     const row = document.createElement("div");
@@ -77,20 +114,12 @@ function renderWaypoints() {
   });
 }
 
-addWaypointBtn.addEventListener("click", () => {
-  waypoints.push({ value: "" });
-  renderWaypoints();
-});
-
-// Initialize with two waypoints
-waypoints = [{ value: "" }, { value: "" }];
-renderWaypoints();
-
 // =========================
 // MAP & SERVICES INIT
 // =========================
 function initMapAndServices() {
   if (map) return;
+  if (!mapEl) return;
 
   map = new google.maps.Map(mapEl, {
     center: { lat: 44, lng: 18 },
@@ -105,7 +134,12 @@ function initMapAndServices() {
 // BUILD ROUTE
 // =========================
 async function buildRoute() {
-  const raw = waypoints.map(w => w.value.trim()).filter(v => v.length > 0);
+  if (!Array.isArray(waypoints)) {
+    alert("Waypoints not initialized. Please reload the page.");
+    return;
+  }
+
+  const raw = waypoints.map(w => (w && w.value ? w.value.trim() : "")).filter(v => v.length > 0);
   if (raw.length < 2) {
     alert("Please enter at least 2 waypoints.");
     return;
@@ -263,12 +297,4 @@ function drawElevationChart(distances, elevations) {
   });
 }
 
-buildRouteBtn.addEventListener("click", buildRoute);
-
-editWaypointsBtn.addEventListener("click", () => {
-  routeSection.style.display = "none";
-  waypointsSection.style.display = "block";
-});
-
-// Init map when Google script loads
-window.initMap = initMapAndServices;
+// initMap is assigned in DOMContentLoaded
