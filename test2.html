@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Test 2</title>
+</head>
+<body>
+  <h1>Test 2</h1>
+  <pre id="out"></pre>
+
+  <script>
+    const API_KEY = "AIzaSyBiMYUtbIXA-5zal571orv0Juz8GUqzF0c";
+    const out = document.getElementById("out");
+
+    async function test() {
+      const url =
+        "https://maps.googleapis.com/maps/api/directions/json" +
+        "?origin=Sarajevo" +
+        "&destination=Mostar" +
+        "&key=" + API_KEY;
+
+      out.textContent = "Calling: " + url + "\n\n";
+
+      try {
+        const res = await fetch(url);
+        out.textContent += "Status: " + res.status + "\n";
+        const json = await res.json();
+        out.textContent += "Response status field: " + json.status;
+      } catch (e) {
+        out.textContent += "Error: " + e.message;
+      }
+    }
+
+    test();
+  </script>
+</body>
+</html>
