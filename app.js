@@ -1,7 +1,7 @@
 // =========================
 // CONFIG
 // =========================
-const GOOGLE_API_KEY = "AIzaSyBiMYUtbIXA-5zal571orv0Juz8GUqzF0c";
+// API key is already loaded via the Maps script tag in index.html
 
 // =========================
 // STATE
@@ -10,6 +10,8 @@ let waypoints = [];
 let map;
 let routePolyline;
 let elevationChart;
+let directionsService;
+let elevationService;
 
 // =========================
 // WAYPOINT UI
@@ -85,17 +87,22 @@ waypoints = [{ value: "" }, { value: "" }];
 renderWaypoints();
 
 // =========================
-// MAP INIT
+// MAP & SERVICES INIT
 // =========================
-function initMap() {
+function initMapAndServices() {
+  if (map) return;
+
   map = new google.maps.Map(mapEl, {
     center: { lat: 44, lng: 18 },
     zoom: 7
   });
+
+  directionsService = new google.maps.DirectionsService();
+  elevationService = new google.maps.ElevationService();
 }
 
 // =========================
-// DIRECTIONS + ELEVATION
+// BUILD ROUTE
 // =========================
 async function buildRoute() {
   const raw = waypoints.map(w => w.value.trim()).filter(v => v.length > 0);
@@ -112,29 +119,26 @@ async function buildRoute() {
   buildRouteBtn.textContent = "Building...";
 
   try {
-    // Directions
-    const dirParams = new URLSearchParams({
+    initMapAndServices();
+
+    // Directions via DirectionsService
+    const request = {
       origin,
       destination,
-      key: GOOGLE_API_KEY
-    });
+      travelMode: google.maps.TravelMode.DRIVING
+    };
     if (waypointsParam.length > 0) {
-      dirParams.set("waypoints", waypointsParam.join("|"));
+      request.waypoints = waypointsParam.map(loc => ({
+        location: loc,
+        stopover: true
+      }));
     }
 
-    const dirUrl = "https://maps.googleapis.com/maps/api/directions/json?" + dirParams.toString();
-    const dirRes = await fetch(dirUrl);
-    const dirJson = await dirRes.json();
-
-    if (dirJson.status !== "OK") {
-      throw new Error("Directions error: " + dirJson.status);
-    }
-
-    const route = dirJson.routes[0];
+    const dirResult = await directionsService.route(request);
+    const route = dirResult.routes[0];
     const overviewPolyline = route.overview_polyline.points;
 
     // Draw route on map
-    if (!map) initMap();
     const path = google.maps.geometry.encoding.decodePath(overviewPolyline);
     if (routePolyline) routePolyline.setMap(null);
     routePolyline = new google.maps.Polyline({
@@ -146,41 +150,35 @@ async function buildRoute() {
       strokeOpacity: 0.8
     });
 
-    map.fitBounds(new google.maps.LatLngBounds(
-      new google.maps.LatLng(Infinity, Infinity),
-      new google.maps.LatLng(-Infinity, -Infinity)
-    ));
+    const bounds = new google.maps.LatLngBounds();
     for (const latLng of path) {
-      const bounds = map.getBounds();
       bounds.extend(latLng);
-      map.fitBounds(bounds);
     }
+    map.fitBounds(bounds);
 
-    // Distance & basic stats
+    // Distance from legs
     let totalDistanceM = 0;
-    let totalAscent = 0;
-    let totalDescent = 0;
-
-    // We'll compute ascent/descent from elevation data; distance from Directions
     for (const leg of route.legs) {
       totalDistanceM += leg.distance.value;
     }
 
-    // Elevation along path
-    const elevParams = new URLSearchParams({
-      path: "enc:" + overviewPolyline,
-      samples: "200",
-      key: GOOGLE_API_KEY
+    // Elevation along path via ElevationService
+    const elevationRequest = {
+      path: path,
+      samples: 200
+    };
+
+    const elevResult = await new Promise((resolve, reject) => {
+      elevationService.getElevationAlongPath(elevationRequest, (results, status) => {
+        if (status === google.maps.ElevationStatus.OK) {
+          resolve(results);
+        } else {
+          reject(new Error("Elevation error: " + status));
+        }
+      });
     });
-    const elevUrl = "https://maps.googleapis.com/maps/api/elevation/json?" + elevParams.toString();
-    const elevRes = await fetch(elevUrl);
-    const elevJson = await elevRes.json();
 
-    if (elevJson.status !== "OK") {
-      throw new Error("Elevation error: " + elevJson.status);
-    }
-
-    const elevations = elevJson.results.map(r => r.elevation);
+    const elevations = elevResult.map(r => r.elevation);
     const distances = [];
     const step = totalDistanceM / (elevations.length - 1);
     for (let i = 0; i < elevations.length; i++) {
@@ -188,6 +186,8 @@ async function buildRoute() {
     }
 
     // Ascent / descent
+    let totalAscent = 0;
+    let totalDescent = 0;
     for (let i = 1; i < elevations.length; i++) {
       const dz = elevations[i] - elevations[i - 1];
       if (dz > 0) totalAscent += dz;
@@ -207,7 +207,8 @@ async function buildRoute() {
     waypointsSection.style.display = "none";
     routeSection.style.display = "block";
   } catch (e) {
-    alert(e.message);
+    console.error(e);
+    alert(e.message || String(e));
   } finally {
     buildRouteBtn.disabled = false;
     buildRouteBtn.textContent = "Build route";
@@ -267,10 +268,7 @@ buildRouteBtn.addEventListener("click", buildRoute);
 editWaypointsBtn.addEventListener("click", () => {
   routeSection.style.display = "none";
   waypointsSection.style.display = "block";
-  if (map) {
-    // keep map, but hide section
-  }
 });
 
 // Init map when Google script loads
-window.initMap = initMap;
+window.initMap = initMapAndServices;
