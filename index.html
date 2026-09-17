@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Route Planner</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <h1>Route Planner</h1>
+
+  <section id="waypoints-section">
+    <h2>Waypoints</h2>
+    <div id="waypoints-list"></div>
+    <button id="add-waypoint-btn">Add waypoint</button>
+    <button id="build-route-btn">Build route</button>
+  </section>
+
+  <section id="route-section" style="display:none;">
+    <h2>Route</h2>
+    <div id="map" style="height: 300px; width: 100%;"></div>
+    <canvas id="elevation-chart" width="600" height="250"></canvas>
+    <div id="summary"></div>
+    <button id="edit-waypoints-btn">Edit waypoints</button>
+  </section>
+
+  <!-- Google Maps -->
+  <script
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBiMYUtbIXA-5zal571orv0Juz8GUqzF0c"
+    defer
+  ></script>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- App logic -->
+  <script src="app.js"></script>
+</body>
+</html>
