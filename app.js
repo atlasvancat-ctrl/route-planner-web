@@ -370,12 +370,79 @@ function drawElevationChart(distances, elevations, climbs = []) {
 
   const ctx = chartCanvas.getContext("2d");
 
+  // 1. Determine max distance across route and active climbs
+  const routeDistance = distances.length > 0 ? distances[distances.length - 1] : 0;
+  let maxDistance = routeDistance;
+
+  climbs.forEach(c => {
+    if (c.distance_km > maxDistance) {
+      maxDistance = c.distance_km;
+    }
+  });
+
+  if (maxDistance <= 0) {
+    // Nothing meaningful to plot
+    return;
+  }
+
+  // 2. Choose a fixed number of points for the shared X axis
+  const N = 200; // resolution of the chart
+  const sharedDistances = [];
+  for (let i = 0; i < N; i++) {
+    sharedDistances.push((i / (N - 1)) * maxDistance);
+  }
+
+  // Helper: resample (x, y) onto sharedDistances by linear interpolation
+  function resampleSeries(x, y) {
+    if (!x || !y || x.length === 0 || y.length === 0 || x.length !== y.length) {
+      return new Array(N).fill(null);
+    }
+
+    const out = new Array(N).fill(null);
+
+    for (let i = 0; i < N; i++) {
+      const d = sharedDistances[i];
+
+      // If beyond the series’ max distance, leave as null
+      if (d > x[x.length - 1]) {
+        continue;
+      }
+
+      // Find segment [x0, x1] containing d
+      let j = 0;
+      while (j < x.length - 1 && x[j + 1] < d) {
+        j++;
+      }
+
+      const x0 = x[j];
+      const x1 = x[j + 1];
+      const y0 = y[j];
+      const y1 = y[j + 1];
+
+      if (x1 === x0) {
+        out[i] = y0;
+      } else {
+        const t = (d - x0) / (x1 - x0);
+        out[i] = y0 + t * (y1 - y0);
+      }
+    }
+
+    return out;
+  }
+
+  // 3. Build shared X labels
+  const labels = sharedDistances.map(d => d.toFixed(1));
+
+  // 4. Resample route profile
+  const routeResampled = resampleSeries(distances, elevations);
+
+  // 5. Build datasets
   const datasets = [];
 
   // Main route
   datasets.push({
     label: "Route",
-    data: elevations,
+    data: routeResampled,
     borderColor: "#1976D2",
     backgroundColor: "rgba(25, 118, 210, 0.1)",
     borderWidth: 2,
@@ -395,30 +462,31 @@ function drawElevationChart(distances, elevations, climbs = []) {
   climbs.forEach((climb, idx) => {
     const color = colors[idx % colors.length];
 
-    // Resample climb profile to match route’s x‑axis length for display
-    // For simplicity, we just map climb profile to its own distance range.
+    // Build climb distance axis
     const climbDistances = [];
     const step = climb.distance_km / (climb.profile.length - 1);
     for (let i = 0; i < climb.profile.length; i++) {
       climbDistances.push(i * step);
     }
 
+    const climbResampled = resampleSeries(climbDistances, climb.profile);
+
     datasets.push({
       label: climb.name,
-      data: climb.profile,
+      data: climbResampled,
       borderColor: color,
       backgroundColor: "transparent",
       borderWidth: 2,
       pointRadius: 0,
-      fill: false,
-      hidden: false
+      fill: false
     });
   });
 
+  // 6. Create chart
   elevationChart = new Chart(ctx, {
     type: "line",
     data: {
-      labels: distances.map(d => d.toFixed(1)),
+      labels,
       datasets
     },
     options: {
@@ -428,13 +496,19 @@ function drawElevationChart(distances, elevations, climbs = []) {
         legend: { position: "bottom" },
         tooltip: {
           callbacks: {
-            label: ctx => ctx.dataset.label + ": " + ctx.parsed.y.toFixed(0) + " m"
+            label: ctx => {
+              const val = ctx.parsed.y;
+              if (val == null) return ctx.dataset.label + ": –";
+              return ctx.dataset.label + ": " + val.toFixed(0) + " m";
+            }
           }
         }
       },
       scales: {
         x: {
-          title: { display: true, text: "Distance (km)" }
+          title: { display: true, text: "Distance (km)" },
+          min: 0,
+          max: maxDistance
         },
         y: {
           title: { display: true, text: "Elevation (m)" }
@@ -443,7 +517,6 @@ function drawElevationChart(distances, elevations, climbs = []) {
     }
   });
 }
-
 // =========================
 // Climb Toggles
 // =========================
