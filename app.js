@@ -8,6 +8,7 @@ let elevationChart;
 let directionsService;
 let elevationService;
 let lastRouteChartState = null; // { distances, elevations }
+let normalizeStartCheckbox;
 
 // DOM elements (will be set in init)
 let waypointsListEl;
@@ -51,6 +52,7 @@ document.addEventListener("DOMContentLoaded", () => {
   climbsFileInput = document.getElementById("climbs-file-input");
   importStatusEl = document.getElementById("import-status");
   loadDefaultClimbs();
+  normalizeStartCheckbox = document.getElementById("normalize-start-checkbox");
 
   climbsFileInput.addEventListener("change", async (e) => {
     const file = e.target.files[0];
@@ -123,7 +125,19 @@ document.addEventListener("DOMContentLoaded", () => {
       descent_m: Number(descent_m.toFixed(0)),
       profile: elevations.map(e => Number(e.toFixed(1)))
     };
-  
+
+    normalizeStartCheckbox.addEventListener("change", () => {
+    // Redraw chart with current data if it exists
+    if (elevationChart && window.lastRouteChartState) {
+      drawElevationChart(
+        window.lastRouteChartState.distances,
+        window.lastRouteChartState.elevations,
+        getActiveClimbs(),
+        normalizeStartCheckbox.checked
+      );
+    }
+  });
+    
     const json = JSON.stringify(climb, null, 2);
     const blob = new Blob([json], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -351,6 +365,7 @@ async function buildRoute() {
     routeSection.style.display = "block";
     document.getElementById("climbs-section").style.display = "block";
     exportClimbSection.style.display = "block";
+    document.getElementById("chart-options-section").style.display = "block";
   } catch (e) {
     console.error(e);
     alert(e.message || String(e));
@@ -363,7 +378,7 @@ async function buildRoute() {
 // =========================
 // ELEVATION CHART
 // =========================
-function drawElevationChart(distances, elevations, climbs = []) {
+function drawElevationChart(distances, elevations, climbs = [], normalizeStart = false) {
   if (elevationChart) {
     elevationChart.destroy();
   }
@@ -435,7 +450,25 @@ function drawElevationChart(distances, elevations, climbs = []) {
 
   // 4. Resample route profile
   const routeResampled = resampleSeries(distances, elevations);
-
+  // Optionally normalize so all profiles start at 0
+  if (normalizeStart) {
+    // Compute start elevation for route (first non-null value)
+    let routeStart = null;
+    for (let i = 0; i < routeResampled.length; i++) {
+      if (routeResampled[i] != null) {
+        routeStart = routeResampled[i];
+        break;
+      }
+    }
+  
+    if (routeStart != null) {
+      for (let i = 0; i < routeResampled.length; i++) {
+        if (routeResampled[i] != null) {
+          routeResampled[i] -= routeStart;
+        }
+      }
+    }
+  }
   // 5. Build datasets
   const datasets = [];
 
@@ -470,7 +503,24 @@ function drawElevationChart(distances, elevations, climbs = []) {
     }
 
     const climbResampled = resampleSeries(climbDistances, climb.profile);
-
+  if (normalizeStart) {
+    // Normalize climb so its first non-null elevation is 0
+    let climbStart = null;
+    for (let i = 0; i < climbResampled.length; i++) {
+      if (climbResampled[i] != null) {
+        climbStart = climbResampled[i];
+        break;
+      }
+    }
+  
+    if (climbStart != null) {
+      for (let i = 0; i < climbResampled.length; i++) {
+        if (climbResampled[i] != null) {
+          climbResampled[i] -= climbStart;
+        }
+      }
+    }
+  }
     datasets.push({
       label: climb.name,
       data: climbResampled,
