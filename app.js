@@ -53,11 +53,6 @@ document.addEventListener("DOMContentLoaded", () => {
   importStatusEl = document.getElementById("import-status");
   loadDefaultClimbs();
   normalizeStartCheckbox = document.getElementById("normalize-start-checkbox");
-  if (!normalizeStartCheckbox) {
-    console.error("normalize-start-checkbox NOT FOUND in DOM");
-  } else {
-    console.log("normalize-start-checkbox FOUND:", normalizeStartCheckbox);
-  }
 
   climbsFileInput.addEventListener("change", async (e) => {
     const file = e.target.files[0];
@@ -106,61 +101,64 @@ document.addEventListener("DOMContentLoaded", () => {
       importStatusEl.textContent = "Error loading climbs: " + err.message;
     }
   });
-  exportClimbBtn.addEventListener("click", () => {
-    if (!window.lastRouteChartState) {
-      alert("No route loaded yet.");
-      return;
-    }
-    const name = climbNameInput.value.trim() || "Unnamed climb";
-    let id = climbIdInput.value.trim();
-    if (!id) {
-      id = name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
-    }
   
-    const { distances, elevations } = window.lastRouteChartState;
-    const distance_km = distances[distances.length - 1] || 0;
-    const ascent_m = computeAscent(elevations);
-    const descent_m = computeDescent(elevations);
-  
-    const climb = {
-      id,
-      name,
-      distance_km: Number(distance_km.toFixed(2)),
-      ascent_m: Number(ascent_m.toFixed(0)),
-      descent_m: Number(descent_m.toFixed(0)),
-      profile: elevations.map(e => Number(e.toFixed(1)))
-    };
+// Attach checkbox listener once at init
+normalizeStartCheckbox.addEventListener("change", () => {
+  console.log("Checkbox changed, checked =", normalizeStartCheckbox.checked);
+  console.log("elevationChart =", elevationChart);
+  console.log("lastRouteChartState =", window.lastRouteChartState);
 
-    normalizeStartCheckbox.addEventListener("change", () => {
-      console.log("Checkbox changed, checked =", normalizeStartCheckbox.checked);
-      console.log("elevationChart =", elevationChart);
-      console.log("lastRouteChartState =", window.lastRouteChartState);
-    // Redraw chart with current data if it exists
-    if (elevationChart && window.lastRouteChartState) {
-      console.log("Calling drawElevationChart with normalizeStart =", normalizeStartCheckbox.checked);
-      drawElevationChart(
-        window.lastRouteChartState.distances,
-        window.lastRouteChartState.elevations,
-        getActiveClimbs(),
-        normalizeStartCheckbox.checked
-      );
-    } else {
-      console.log("Not redrawing: missing chart or route state");
-    }
-  });
-    
-    const json = JSON.stringify(climb, null, 2);
-    const blob = new Blob([json], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-  
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = (id || "climb") + ".json";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  });
+  // Redraw chart with current data if it exists
+  if (elevationChart && window.lastRouteChartState) {
+    console.log("Calling drawElevationChart with normalizeStart =", normalizeStartCheckbox.checked);
+    drawElevationChart(
+      window.lastRouteChartState.distances,
+      window.lastRouteChartState.elevations,
+      getActiveClimbs(),
+      normalizeStartCheckbox.checked
+    );
+  } else {
+    console.log("Not redrawing: missing chart or route state");
+  }
+});
+
+exportClimbBtn.addEventListener("click", () => {
+  if (!window.lastRouteChartState) {
+    alert("No route loaded yet.");
+    return;
+  }
+  const name = climbNameInput.value.trim() || "Unnamed climb";
+  let id = climbIdInput.value.trim();
+  if (!id) {
+    id = name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+  }
+
+  const { distances, elevations } = window.lastRouteChartState;
+  const distance_km = distances[distances.length - 1] || 0;
+  const ascent_m = computeAscent(elevations);
+  const descent_m = computeDescent(elevations);
+
+  const climb = {
+    id,
+    name,
+    distance_km: Number(distance_km.toFixed(2)),
+    ascent_m: Number(ascent_m.toFixed(0)),
+    descent_m: Number(descent_m.toFixed(0)),
+    profile: elevations.map(e => Number(e.toFixed(1)))
+  };
+
+  const json = JSON.stringify(climb, null, 2);
+  const blob = new Blob([json], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = (id || "climb") + ".json";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+});
 
   // Initialize with two waypoints
   waypoints = [{ value: "" }, { value: "" }];
