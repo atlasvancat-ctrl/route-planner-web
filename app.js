@@ -19,6 +19,7 @@ let routeSection;
 let summaryEl;
 let mapEl;
 let chartCanvas;
+let exportClimbSection, exportClimbBtn, climbNameInput, climbIdInput;
 
 // =========================
 // REFERENCE CLIMBS (hardcoded for now)
@@ -80,6 +81,48 @@ document.addEventListener("DOMContentLoaded", () => {
   chartCanvas = document.getElementById("elevation-chart");
   climbsListEl = document.getElementById("climbs-list");
   renderClimbToggles();
+  exportClimbSection = document.getElementById("export-climb-section");
+  exportClimbBtn = document.getElementById("export-climb-btn");
+  climbNameInput = document.getElementById("climb-name-input");
+  climbIdInput = document.getElementById("climb-id-input");
+
+  exportClimbBtn.addEventListener("click", () => {
+    if (!window.lastRouteChartState) {
+      alert("No route loaded yet.");
+      return;
+    }
+    const name = climbNameInput.value.trim() || "Unnamed climb";
+    let id = climbIdInput.value.trim();
+    if (!id) {
+      id = name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+    }
+  
+    const { distances, elevations } = window.lastRouteChartState;
+    const distance_km = distances[distances.length - 1] || 0;
+    const ascent_m = computeAscent(elevations);
+    const descent_m = computeDescent(elevations);
+  
+    const climb = {
+      id,
+      name,
+      distance_km: Number(distance_km.toFixed(2)),
+      ascent_m: Number(ascent_m.toFixed(0)),
+      descent_m: Number(descent_m.toFixed(0)),
+      profile: elevations.map(e => Number(e.toFixed(1)))
+    };
+  
+    const json = JSON.stringify(climb, null, 2);
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+  
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = (id || "climb") + ".json";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
 
   // Initialize with two waypoints
   waypoints = [{ value: "" }, { value: "" }];
@@ -294,6 +337,7 @@ async function buildRoute() {
     waypointsSection.style.display = "none";
     routeSection.style.display = "block";
     document.getElementById("climbs-section").style.display = "block";
+    exportClimbSection.style.display = "block";
   } catch (e) {
     console.error(e);
     alert(e.message || String(e));
@@ -449,4 +493,28 @@ function getActiveClimbs() {
     }
   });
   return active;
+}
+
+// =========================
+// Compute Ascent
+// =========================
+function computeAscent(elevs) {
+  let total = 0;
+  for (let i = 1; i < elevs.length; i++) {
+    const dz = elevs[i] - elevs[i - 1];
+    if (dz > 0) total += dz;
+  }
+  return total;
+}
+
+// =========================
+// Compute Descent
+// =========================
+function computeDescent(elevs) {
+  let total = 0;
+  for (let i = 1; i < elevs.length; i++) {
+    const dz = elevs[i] - elevs[i - 1];
+    if (dz < 0) total += -dz;
+  }
+  return total;
 }
