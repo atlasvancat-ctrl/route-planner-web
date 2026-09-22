@@ -293,9 +293,6 @@ async function buildRoute() {
 
     const dirResult = await directionsService.route(request);
 
-    // DEBUG: log the full result
-    console.log("Directions result:", JSON.stringify(dirResult, null, 2));
-
     if (!dirResult || !dirResult.routes || dirResult.routes.length === 0) {
       throw new Error("No routes found for these waypoints.");
     }
