@@ -53,7 +53,11 @@ document.addEventListener("DOMContentLoaded", () => {
   importStatusEl = document.getElementById("import-status");
   loadDefaultClimbs();
   normalizeStartCheckbox = document.getElementById("normalize-start-checkbox");
-  console.log("Checkbox element:", normalizeStartCheckbox);
+  if (!normalizeStartCheckbox) {
+    console.error("normalize-start-checkbox NOT FOUND in DOM");
+  } else {
+    console.log("normalize-start-checkbox FOUND:", normalizeStartCheckbox);
+  }
 
   climbsFileInput.addEventListener("change", async (e) => {
     const file = e.target.files[0];
