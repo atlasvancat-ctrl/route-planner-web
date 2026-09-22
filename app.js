@@ -49,7 +49,7 @@ document.addEventListener("DOMContentLoaded", () => {
     renderWaypoints();
   });
 
-  buildRouteBtn.addEventListener("click", buildRoute);
+  Btn.addEventListener("click", );
   editWaypointsBtn.addEventListener("click", () => {
     routeSection.style.display = "none";
     waypointsSection.style.display = "block";
@@ -169,7 +169,17 @@ async function buildRoute() {
     }
 
     const dirResult = await directionsService.route(request);
+
+    // Basic validation of result
+    if (!dirResult || !dirResult.routes || dirResult.routes.length === 0) {
+      throw new Error("No routes found for these waypoints.");
+    }
+
     const route = dirResult.routes[0];
+    if (!route.overview_polyline || typeof route.overview_polyline.points !== "string") {
+      throw new Error("Route data is incomplete (missing polyline).");
+    }
+
     const overviewPolyline = route.overview_polyline.points;
 
     // Draw route on map
@@ -248,7 +258,6 @@ async function buildRoute() {
     buildRouteBtn.textContent = "Build route";
   }
 }
-
 function drawElevationChart(distances, elevations) {
   if (elevationChart) {
     elevationChart.destroy();
