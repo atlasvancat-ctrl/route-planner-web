@@ -177,12 +177,13 @@ async function buildRoute() {
     }
 
     const route = dirResult.routes[0];
-    if (!route.overview_polyline || typeof route.overview_polyline.points !== "string") {
-      throw new Error("Route data is incomplete (missing polyline).");
+    
+    if (!route.overview_path || route.overview_path.length < 2) {
+      throw new Error("Route data is incomplete: no overview path was returned.");
     }
-
-    const overviewPolyline = route.overview_polyline.points;
-    const path = google.maps.geometry.encoding.decodePath(overviewPolyline);
+    
+    // overview_path is already an array of google.maps.LatLng objects.
+    const path = route.overview_path;
 
     if (routePolyline) routePolyline.setMap(null);
     routePolyline = new google.maps.Polyline({
