@@ -104,13 +104,9 @@ document.addEventListener("DOMContentLoaded", () => {
   
 // Attach checkbox listener once at init
 normalizeStartCheckbox.addEventListener("change", () => {
-  console.log("Checkbox changed, checked =", normalizeStartCheckbox.checked);
-  console.log("elevationChart =", elevationChart);
-  console.log("lastRouteChartState =", window.lastRouteChartState);
 
   // Redraw chart with current data if it exists
   if (elevationChart && window.lastRouteChartState) {
-    console.log("Calling drawElevationChart with normalizeStart =", normalizeStartCheckbox.checked);
     drawElevationChart(
       window.lastRouteChartState.distances,
       window.lastRouteChartState.elevations,
