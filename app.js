@@ -20,6 +20,7 @@ let summaryEl;
 let mapEl;
 let chartCanvas;
 let exportClimbSection, exportClimbBtn, climbNameInput, climbIdInput;
+let climbsFileInput, importStatusEl;
 
 // =========================
 // REFERENCE CLIMBS (hardcoded for now)
@@ -85,7 +86,56 @@ document.addEventListener("DOMContentLoaded", () => {
   exportClimbBtn = document.getElementById("export-climb-btn");
   climbNameInput = document.getElementById("climb-name-input");
   climbIdInput = document.getElementById("climb-id-input");
+  climbsFileInput = document.getElementById("climbs-file-input");
+  importStatusEl = document.getElementById("import-status");
 
+  climbsFileInput.addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+  
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+  
+      let climbsArray;
+      if (Array.isArray(data)) {
+        climbsArray = data;
+      } else if (data && typeof data === "object" && !Array.isArray(data)) {
+        // Single climb object
+        climbsArray = [data];
+      } else {
+        throw new Error("Invalid climbs JSON format.");
+      }
+  
+      // Basic validation
+      climbsArray.forEach((c, i) => {
+        if (!c.id || !c.name || !Array.isArray(c.profile)) {
+          throw new Error("Climb " + (i + 1) + " is missing required fields (id, name, profile).");
+        }
+      });
+  
+      // Merge into REFERENCE_CLIMBS
+      // Avoid duplicates by id
+      const existingIds = new Set(REFERENCE_CLIMBS.map(c => c.id));
+      let added = 0;
+      climbsArray.forEach(c => {
+        if (!existingIds.has(c.id)) {
+          REFERENCE_CLIMBS.push(c);
+          existingIds.add(c.id);
+          added++;
+        }
+      });
+  
+      importStatusEl.textContent =
+        "Loaded " + climbsArray.length + " climb(s), added " + added + " new.";
+  
+      // Re-render climb toggles
+      renderClimbToggles();
+    } catch (err) {
+      console.error(err);
+      importStatusEl.textContent = "Error loading climbs: " + err.message;
+    }
+  });
   exportClimbBtn.addEventListener("click", () => {
     if (!window.lastRouteChartState) {
       alert("No route loaded yet.");
