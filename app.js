@@ -1,4 +1,4 @@
-// v3=========================
+// =========================
 // STATE
 // =========================
 let waypoints = [];
@@ -7,6 +7,7 @@ let routePolyline;
 let elevationChart;
 let directionsService;
 let elevationService;
+let lastRouteChartState = null; // { distances, elevations }
 
 // DOM elements (will be set in init)
 let waypointsListEl;
@@ -18,6 +19,50 @@ let routeSection;
 let summaryEl;
 let mapEl;
 let chartCanvas;
+
+// =========================
+// REFERENCE CLIMBS (hardcoded for now)
+// =========================
+// Each climb: { id, name, distance_km, ascent_m, descent_m, profile: [elevations...] }
+// profile is elevation in metres at each XXm (or other fixed step).
+
+const REFERENCE_CLIMBS = [
+  {
+    id: "Austria",
+    name: "Austria Border Crossing",
+    distance_km: 23.8,
+    ascent_m: 1870,
+    descent_m: 120,
+    // Example: elevation every 1 km (25 points for 24.3 km, approximated)
+    profile: [
+      900, 950, 1000, 1050, 1100, 1200, 1300, 1400, 1500, 1600,
+      1700, 1800, 1900, 2000, 2100, 2200, 2300, 2400, 2500, 2600,
+      2700, 2750, 2759, 2750, 2700
+    ]
+  },
+  {
+    id: "alpe_dhuez",
+    name: "Alpe d’Huez",
+    distance_km: 13.8,
+    ascent_m: 1070,
+    descent_m: 30,
+    profile: [
+      720, 800, 900, 1000, 1100, 1200, 1300, 1400, 1500, 1600,
+      1700, 1750, 1800, 1850, 1860
+    ]
+  },
+  {
+    id: "mont_ventoux",
+    name: "Mont Ventoux (Bédoin)",
+    distance_km: 21.5,
+    ascent_m: 1610,
+    descent_m: 50,
+    profile: [
+      300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200,
+      1300, 1400, 1500, 1600, 1700, 1800, 1900, 1950, 2000, 2050, 2100, 2116
+    ]
+  }
+];
 
 // =========================
 // INIT
@@ -33,6 +78,8 @@ document.addEventListener("DOMContentLoaded", () => {
   summaryEl = document.getElementById("summary");
   mapEl = document.getElementById("map");
   chartCanvas = document.getElementById("elevation-chart");
+  climbsListEl = document.getElementById("climbs-list");
+  renderClimbToggles();
 
   // Initialize with two waypoints
   waypoints = [{ value: "" }, { value: "" }];
@@ -235,8 +282,9 @@ async function buildRoute() {
       if (dz > 0) totalAscent += dz;
       else totalDescent += -dz;
     }
-
-    drawElevationChart(distances, elevations);
+    
+    window.lastRouteChartState = { distances, elevations };
+    drawElevationChart(distances, elevations, getActiveClimbs());
 
     summaryEl.innerHTML =
       "Distance: " + (totalDistanceM / 1000).toFixed(1) + " km | " +
@@ -245,6 +293,7 @@ async function buildRoute() {
 
     waypointsSection.style.display = "none";
     routeSection.style.display = "block";
+    document.getElementById("climbs-section").style.display = "block";
   } catch (e) {
     console.error(e);
     alert(e.message || String(e));
@@ -257,34 +306,72 @@ async function buildRoute() {
 // =========================
 // ELEVATION CHART
 // =========================
-function drawElevationChart(distances, elevations) {
+function drawElevationChart(distances, elevations, climbs = []) {
   if (elevationChart) {
     elevationChart.destroy();
   }
 
   const ctx = chartCanvas.getContext("2d");
+
+  const datasets = [];
+
+  // Main route
+  datasets.push({
+    label: "Route",
+    data: elevations,
+    borderColor: "#1976D2",
+    backgroundColor: "rgba(25, 118, 210, 0.1)",
+    borderWidth: 2,
+    pointRadius: 0,
+    fill: true
+  });
+
+  // Reference climbs
+  const colors = [
+    "#E91E63", // pink
+    "#FF9800", // orange
+    "#4CAF50", // green
+    "#9C27B0", // purple
+    "#00BCD4"  // cyan
+  ];
+
+  climbs.forEach((climb, idx) => {
+    const color = colors[idx % colors.length];
+
+    // Resample climb profile to match route’s x‑axis length for display
+    // For simplicity, we just map climb profile to its own distance range.
+    const climbDistances = [];
+    const step = climb.distance_km / (climb.profile.length - 1);
+    for (let i = 0; i < climb.profile.length; i++) {
+      climbDistances.push(i * step);
+    }
+
+    datasets.push({
+      label: climb.name,
+      data: climb.profile,
+      borderColor: color,
+      backgroundColor: "transparent",
+      borderWidth: 2,
+      pointRadius: 0,
+      fill: false,
+      hidden: false
+    });
+  });
+
   elevationChart = new Chart(ctx, {
     type: "line",
     data: {
       labels: distances.map(d => d.toFixed(1)),
-      datasets: [{
-        label: "Elevation (m)",
-        data: elevations,
-        borderColor: "#1976D2",
-        backgroundColor: "rgba(25, 118, 210, 0.1)",
-        borderWidth: 2,
-        pointRadius: 0,
-        fill: true
-      }]
+      datasets
     },
     options: {
       responsive: false,
       maintainAspectRatio: false,
       plugins: {
-        legend: { display: false },
+        legend: { position: "bottom" },
         tooltip: {
           callbacks: {
-            label: ctx => ctx.parsed.y.toFixed(0) + " m"
+            label: ctx => ctx.dataset.label + ": " + ctx.parsed.y.toFixed(0) + " m"
           }
         }
       },
@@ -298,4 +385,68 @@ function drawElevationChart(distances, elevations) {
       }
     }
   });
+}
+
+// =========================
+// Climb Toggles
+// =========================
+function renderClimbToggles() {
+  if (!climbsListEl) return;
+  climbsListEl.innerHTML = "";
+
+  REFERENCE_CLIMBS.forEach((climb, idx) => {
+    const row = document.createElement("div");
+    row.className = "waypoint-row"; // reuse basic styling
+
+    const label = document.createElement("label");
+    label.style.display = "flex";
+    label.style.alignItems = "center";
+    label.style.gap = "0.5rem";
+    label.style.flex = "1";
+
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.dataset.climbId = climb.id;
+    checkbox.checked = false; // default off
+    checkbox.addEventListener("change", () => {
+      // Redraw chart with current route if it exists
+      if (elevationChart && window.lastRouteChartState) {
+        drawElevationChart(
+          window.lastRouteChartState.distances,
+          window.lastRouteChartState.elevations,
+          getActiveClimbs()
+        );
+      }
+    });
+
+    const text = document.createElement("span");
+    text.textContent =
+      climb.name +
+      " (" +
+      climb.distance_km.toFixed(1) +
+      " km, +" +
+      Math.round(climb.ascent_m) +
+      " m)";
+
+    label.appendChild(checkbox);
+    label.appendChild(text);
+    row.appendChild(label);
+
+    climbsListEl.appendChild(row);
+  });
+}
+
+// =========================
+// Get active Climbs
+// =========================
+function getActiveClimbs() {
+  const checkboxes = document.querySelectorAll('#climbs-list input[type="checkbox"]');
+  const active = [];
+  checkboxes.forEach(cb => {
+    if (cb.checked) {
+      const climb = REFERENCE_CLIMBS.find(c => c.id === cb.dataset.climbId);
+      if (climb) active.push(climb);
+    }
+  });
+  return active;
 }
