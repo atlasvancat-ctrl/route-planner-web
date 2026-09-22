@@ -20,6 +20,21 @@
     <h2>Reference climbs</h2>
     <div id="climbs-list"></div>
   </section>
+
+  <section id="export-climb-section" style="display:none;">
+  <h2>Save current route as climb</h2>
+  <div style="display:flex; flex-direction:column; gap:0.5rem; max-width:300px;">
+    <label>
+      Climb name
+      <input id="climb-name-input" type="text" placeholder="e.g. My Local Climb" style="width:100%; padding:0.4rem;" />
+    </label>
+    <label>
+      Climb ID (optional)
+      <input id="climb-id-input" type="text" placeholder="e.g. my_local_climb" style="width:100%; padding:0.4rem;" />
+    </label>
+    <button id="export-climb-btn" style="padding:0.4rem 0.6rem;">Download climb JSON</button>
+  </div>
+</section>
   
   <section id="route-section" style="display:none;">
     <h2>Route</h2>
