@@ -53,6 +53,7 @@ document.addEventListener("DOMContentLoaded", () => {
   importStatusEl = document.getElementById("import-status");
   loadDefaultClimbs();
   normalizeStartCheckbox = document.getElementById("normalize-start-checkbox");
+  console.log("Checkbox element:", normalizeStartCheckbox);
 
   climbsFileInput.addEventListener("change", async (e) => {
     const file = e.target.files[0];
@@ -127,14 +128,20 @@ document.addEventListener("DOMContentLoaded", () => {
     };
 
     normalizeStartCheckbox.addEventListener("change", () => {
+      console.log("Checkbox changed, checked =", normalizeStartCheckbox.checked);
+      console.log("elevationChart =", elevationChart);
+      console.log("lastRouteChartState =", window.lastRouteChartState);
     // Redraw chart with current data if it exists
     if (elevationChart && window.lastRouteChartState) {
+      console.log("Calling drawElevationChart with normalizeStart =", normalizeStartCheckbox.checked);
       drawElevationChart(
         window.lastRouteChartState.distances,
         window.lastRouteChartState.elevations,
         getActiveClimbs(),
         normalizeStartCheckbox.checked
       );
+    } else {
+      console.log("Not redrawing: missing chart or route state");
     }
   });
     
