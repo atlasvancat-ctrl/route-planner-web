@@ -1,9 +1,4 @@
 // =========================
-// CONFIG
-// =========================
-// API key is already loaded via the Maps script tag in index.html
-
-// =========================
 // STATE
 // =========================
 let waypoints = [];
@@ -13,9 +8,7 @@ let elevationChart;
 let directionsService;
 let elevationService;
 
-// =========================
-// DOM ELEMENTS
-// =========================
+// DOM elements (will be set in init)
 let waypointsListEl;
 let addWaypointBtn;
 let buildRouteBtn;
@@ -30,6 +23,7 @@ let chartCanvas;
 // INIT
 // =========================
 document.addEventListener("DOMContentLoaded", () => {
+  // Cache DOM elements
   waypointsListEl = document.getElementById("waypoints-list");
   addWaypointBtn = document.getElementById("add-waypoint-btn");
   buildRouteBtn = document.getElementById("build-route-btn");
@@ -44,18 +38,19 @@ document.addEventListener("DOMContentLoaded", () => {
   waypoints = [{ value: "" }, { value: "" }];
   renderWaypoints();
 
+  // Event listeners
   addWaypointBtn.addEventListener("click", () => {
     waypoints.push({ value: "" });
     renderWaypoints();
   });
 
-  Btn.addEventListener("click", );
+  buildRouteBtn.addEventListener("click", buildRoute);
   editWaypointsBtn.addEventListener("click", () => {
     routeSection.style.display = "none";
     waypointsSection.style.display = "block";
   });
 
-  // Init map when Google script loads
+  // Expose init for Maps callback
   window.initMap = initMapAndServices;
 });
 
@@ -65,13 +60,14 @@ document.addEventListener("DOMContentLoaded", () => {
 function renderWaypoints() {
   if (!waypointsListEl) return;
   waypointsListEl.innerHTML = "";
+
   waypoints.forEach((wp, idx) => {
     const row = document.createElement("div");
     row.className = "waypoint-row";
 
     const input = document.createElement("input");
     input.type = "text";
-    input.value = wp.value;
+    input.value = wp.value || "";
     input.placeholder = "lat,lon / Plus Code / place name";
     input.addEventListener("input", () => {
       waypoints[idx].value = input.value;
@@ -139,7 +135,10 @@ async function buildRoute() {
     return;
   }
 
-  const raw = waypoints.map(w => (w && w.value ? w.value.trim() : "")).filter(v => v.length > 0);
+  const raw = waypoints
+    .map(w => (w && w.value ? w.value.trim() : ""))
+    .filter(v => v.length > 0);
+
   if (raw.length < 2) {
     alert("Please enter at least 2 waypoints.");
     return;
@@ -155,12 +154,12 @@ async function buildRoute() {
   try {
     initMapAndServices();
 
-    // Directions via DirectionsService
     const request = {
       origin,
       destination,
       travelMode: google.maps.TravelMode.DRIVING
     };
+
     if (waypointsParam.length > 0) {
       request.waypoints = waypointsParam.map(loc => ({
         location: loc,
@@ -170,7 +169,6 @@ async function buildRoute() {
 
     const dirResult = await directionsService.route(request);
 
-    // Basic validation of result
     if (!dirResult || !dirResult.routes || dirResult.routes.length === 0) {
       throw new Error("No routes found for these waypoints.");
     }
@@ -181,9 +179,8 @@ async function buildRoute() {
     }
 
     const overviewPolyline = route.overview_polyline.points;
-
-    // Draw route on map
     const path = google.maps.geometry.encoding.decodePath(overviewPolyline);
+
     if (routePolyline) routePolyline.setMap(null);
     routePolyline = new google.maps.Polyline({
       path,
@@ -200,13 +197,11 @@ async function buildRoute() {
     }
     map.fitBounds(bounds);
 
-    // Distance from legs
     let totalDistanceM = 0;
     for (const leg of route.legs) {
       totalDistanceM += leg.distance.value;
     }
 
-    // Elevation along path via ElevationService
     const elevationRequest = {
       path: path,
       samples: 200
@@ -226,10 +221,9 @@ async function buildRoute() {
     const distances = [];
     const step = totalDistanceM / (elevations.length - 1);
     for (let i = 0; i < elevations.length; i++) {
-      distances.push((i * step) / 1000); // km
+      distances.push((i * step) / 1000);
     }
 
-    // Ascent / descent
     let totalAscent = 0;
     let totalDescent = 0;
     for (let i = 1; i < elevations.length; i++) {
@@ -238,16 +232,13 @@ async function buildRoute() {
       else totalDescent += -dz;
     }
 
-    // Draw elevation chart
     drawElevationChart(distances, elevations);
 
-    // Summary
     summaryEl.innerHTML =
       "Distance: " + (totalDistanceM / 1000).toFixed(1) + " km | " +
       "Ascent: " + Math.round(totalAscent) + " m | " +
       "Descent: " + Math.round(totalDescent) + " m";
 
-    // Switch views
     waypointsSection.style.display = "none";
     routeSection.style.display = "block";
   } catch (e) {
@@ -258,10 +249,15 @@ async function buildRoute() {
     buildRouteBtn.textContent = "Build route";
   }
 }
+
+// =========================
+// ELEVATION CHART
+// =========================
 function drawElevationChart(distances, elevations) {
   if (elevationChart) {
     elevationChart.destroy();
   }
+
   const ctx = chartCanvas.getContext("2d");
   elevationChart = new Chart(ctx, {
     type: "line",
@@ -284,26 +280,18 @@ function drawElevationChart(distances, elevations) {
         legend: { display: false },
         tooltip: {
           callbacks: {
-            label: (ctx) => ctx.parsed.y.toFixed(0) + " m"
+            label: ctx => ctx.parsed.y.toFixed(0) + " m"
           }
         }
       },
       scales: {
         x: {
-          title: {
-            display: true,
-            text: "Distance (km)"
-          }
+          title: { display: true, text: "Distance (km)" }
         },
         y: {
-          title: {
-            display: true,
-            text: "Elevation (m)"
-          }
+          title: { display: true, text: "Elevation (m)" }
         }
       }
     }
   });
 }
-
-// initMap is assigned in DOMContentLoaded
