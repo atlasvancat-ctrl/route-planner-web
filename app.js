@@ -23,48 +23,10 @@ let exportClimbSection, exportClimbBtn, climbNameInput, climbIdInput;
 let climbsFileInput, importStatusEl;
 
 // =========================
-// REFERENCE CLIMBS (hardcoded for now)
+// REFERENCE CLIMBS
 // =========================
-// Each climb: { id, name, distance_km, ascent_m, descent_m, profile: [elevations...] }
-// profile is elevation in metres at each XXm (or other fixed step).
-
-const REFERENCE_CLIMBS = [
-  {
-    id: "Austria",
-    name: "Austria Border Crossing",
-    distance_km: 23.8,
-    ascent_m: 1870,
-    descent_m: 120,
-    // Example: elevation every 1 km (25 points for 24.3 km, approximated)
-    profile: [
-      900, 950, 1000, 1050, 1100, 1200, 1300, 1400, 1500, 1600,
-      1700, 1800, 1900, 2000, 2100, 2200, 2300, 2400, 2500, 2600,
-      2700, 2750, 2759, 2750, 2700
-    ]
-  },
-  {
-    id: "alpe_dhuez",
-    name: "Alpe d’Huez",
-    distance_km: 13.8,
-    ascent_m: 1070,
-    descent_m: 30,
-    profile: [
-      720, 800, 900, 1000, 1100, 1200, 1300, 1400, 1500, 1600,
-      1700, 1750, 1800, 1850, 1860
-    ]
-  },
-  {
-    id: "mont_ventoux",
-    name: "Mont Ventoux (Bédoin)",
-    distance_km: 21.5,
-    ascent_m: 1610,
-    descent_m: 50,
-    profile: [
-      300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200,
-      1300, 1400, 1500, 1600, 1700, 1800, 1900, 1950, 2000, 2050, 2100, 2116
-    ]
-  }
-];
+// This will be populated from climbs.json at startup
+const REFERENCE_CLIMBS = [];
 
 // =========================
 // INIT
@@ -88,6 +50,7 @@ document.addEventListener("DOMContentLoaded", () => {
   climbIdInput = document.getElementById("climb-id-input");
   climbsFileInput = document.getElementById("climbs-file-input");
   importStatusEl = document.getElementById("import-status");
+  loadDefaultClimbs();
 
   climbsFileInput.addEventListener("change", async (e) => {
     const file = e.target.files[0];
@@ -567,4 +530,42 @@ function computeDescent(elevs) {
     if (dz < 0) total += -dz;
   }
   return total;
+}
+
+// =========================
+// Load Default Climbs
+// =========================
+async function loadDefaultClimbs() {
+  try {
+    const res = await fetch("climbs.json");
+    if (!res.ok) {
+      // File not found or error – that’s OK, just no default climbs.
+      console.warn("No climbs.json found or failed to load:", res.status);
+      return;
+    }
+
+    const data = await res.json();
+    if (!Array.isArray(data)) {
+      console.warn("climbs.json is not an array; ignoring.");
+      return;
+    }
+
+    const existingIds = new Set(REFERENCE_CLIMBS.map(c => c.id));
+
+    data.forEach((c, i) => {
+      if (!c || !c.id || !c.name || !Array.isArray(c.profile)) {
+        console.warn("Skipping invalid climb at index", i, c);
+        return;
+      }
+      if (!existingIds.has(c.id)) {
+        REFERENCE_CLIMBS.push(c);
+        existingIds.add(c.id);
+      }
+    });
+
+    // Re-render climb toggles now that we have data
+    renderClimbToggles();
+  } catch (e) {
+    console.warn("Error loading climbs.json:", e);
+  }
 }
