@@ -104,18 +104,16 @@ document.addEventListener("DOMContentLoaded", () => {
   
 // Attach checkbox listener once at init
 normalizeStartCheckbox.addEventListener("change", () => {
-
-  // Redraw chart with current data if it exists
-  if (elevationChart && window.lastRouteChartState) {
-    drawElevationChart(
-      window.lastRouteChartState.distances,
-      window.lastRouteChartState.elevations,
-      getActiveClimbs(),
-      normalizeStartCheckbox.checked
-    );
-  } else {
-    console.log("Not redrawing: missing chart or route state");
+  if (!window.lastRouteChartState) {
+    return;
   }
+
+  drawElevationChart(
+    window.lastRouteChartState.distances,
+    window.lastRouteChartState.elevations,
+    getActiveClimbs(),
+    normalizeStartCheckbox.checked
+  );
 });
 
 exportClimbBtn.addEventListener("click", () => {
@@ -356,7 +354,12 @@ async function buildRoute() {
     }
     
     window.lastRouteChartState = { distances, elevations };
-    drawElevationChart(distances, elevations, getActiveClimbs());
+    drawElevationChart(
+      distances,
+      elevations,
+      getActiveClimbs(),
+      isNormalizeStartEnabled()
+    );
 
     summaryEl.innerHTML =
       "Distance: " + (totalDistanceM / 1000).toFixed(1) + " km | " +
@@ -380,194 +383,256 @@ async function buildRoute() {
 // =========================
 // ELEVATION CHART
 // =========================
-function drawElevationChart(distances, elevations, climbs = [], normalizeStart = false) {
+function drawElevationChart(
+  distances,
+  elevations,
+  climbs = [],
+  normalizeStart = false
+) {
   if (elevationChart) {
     elevationChart.destroy();
   }
 
   const ctx = chartCanvas.getContext("2d");
 
-  // 1. Determine max distance across route and active climbs
-  const routeDistance = distances.length > 0 ? distances[distances.length - 1] : 0;
-  let maxDistance = routeDistance;
+  const routeDistance =
+    distances && distances.length
+      ? Number(distances[distances.length - 1])
+      : 0;
 
-  climbs.forEach(c => {
-    if (c.distance_km > maxDistance) {
-      maxDistance = c.distance_km;
-    }
-  });
+  const climbDistances = climbs
+    .map(climb => Number(climb.distance_km) || 0)
+    .filter(distance => distance > 0);
 
-  if (maxDistance <= 0) {
-    // Nothing meaningful to plot
+  const maxDistance = Math.max(routeDistance, ...climbDistances, 0);
+
+  if (!maxDistance || !distances?.length || !elevations?.length) {
     return;
   }
 
-  // 2. Choose a fixed number of points for the shared X axis
-  const N = 200; // resolution of the chart
-  const sharedDistances = [];
-  for (let i = 0; i < N; i++) {
-    sharedDistances.push((i / (N - 1)) * maxDistance);
-  }
+  const N = 200;
 
-  // Helper: resample (x, y) onto sharedDistances by linear interpolation
-  function resampleSeries(x, y) {
-    if (!x || !y || x.length === 0 || y.length === 0 || x.length !== y.length) {
+  // Shared distance locations from 0 through the longest selected profile.
+  const sharedDistances = Array.from(
+    { length: N },
+    (_, i) => (i / (N - 1)) * maxDistance
+  );
+
+  function resampleSeries(sourceDistances, sourceElevations) {
+    if (
+      !sourceDistances ||
+      !sourceElevations ||
+      sourceDistances.length === 0 ||
+      sourceElevations.length === 0 ||
+      sourceDistances.length !== sourceElevations.length
+    ) {
       return new Array(N).fill(null);
     }
 
-    const out = new Array(N).fill(null);
+    const lastDistance = Number(sourceDistances[sourceDistances.length - 1]);
+    const result = new Array(N).fill(null);
+
+    let sourceIndex = 0;
 
     for (let i = 0; i < N; i++) {
-      const d = sharedDistances[i];
+      const distance = sharedDistances[i];
 
-      // If beyond the series’ max distance, leave as null
-      if (d > x[x.length - 1]) {
+      // Do not extend a profile beyond its actual end.
+      if (distance > lastDistance) {
         continue;
       }
 
-      // Find segment [x0, x1] containing d
-      let j = 0;
-      while (j < x.length - 1 && x[j + 1] < d) {
-        j++;
+      while (
+        sourceIndex < sourceDistances.length - 2 &&
+        Number(sourceDistances[sourceIndex + 1]) < distance
+      ) {
+        sourceIndex++;
       }
 
-      const x0 = x[j];
-      const x1 = x[j + 1];
-      const y0 = y[j];
-      const y1 = y[j + 1];
+      const x0 = Number(sourceDistances[sourceIndex]);
+      const y0 = Number(sourceElevations[sourceIndex]);
+      const x1 = Number(sourceDistances[sourceIndex + 1] ?? x0);
+      const y1 = Number(sourceElevations[sourceIndex + 1] ?? y0);
 
       if (x1 === x0) {
-        out[i] = y0;
+        result[i] = y0;
       } else {
-        const t = (d - x0) / (x1 - x0);
-        out[i] = y0 + t * (y1 - y0);
+        const position = (distance - x0) / (x1 - x0);
+        result[i] = y0 + (y1 - y0) * position;
       }
     }
 
-    return out;
+    return result;
   }
 
-  // 3. Build shared X labels
-  const labels = sharedDistances.map(d => d.toFixed(1));
-
-  // 4. Resample route profile
-  const routeResampled = resampleSeries(distances, elevations);
-  // Optionally normalize so all profiles start at 0
-  if (normalizeStart) {
-    // Compute start elevation for route (first non-null value)
-    let routeStart = null;
-    for (let i = 0; i < routeResampled.length; i++) {
-      if (routeResampled[i] != null) {
-        routeStart = routeResampled[i];
-        break;
-      }
+  function normalizeSeries(series) {
+    if (!normalizeStart) {
+      return series;
     }
-  
-    if (routeStart != null) {
-      for (let i = 0; i < routeResampled.length; i++) {
-        if (routeResampled[i] != null) {
-          routeResampled[i] -= routeStart;
+
+    const firstValue = series.find(value => value !== null && Number.isFinite(value));
+
+    if (firstValue === undefined) {
+      return series;
+    }
+
+    return series.map(value =>
+      value === null ? null : value - firstValue
+    );
+  }
+
+  function makePoints(series) {
+    return series
+      .map((elevation, index) => {
+        if (elevation === null || !Number.isFinite(elevation)) {
+          return null;
         }
-      }
-    }
+
+        return {
+          x: sharedDistances[index],
+          y: elevation
+        };
+      })
+      .filter(Boolean);
   }
-  // 5. Build datasets
-  const datasets = [];
 
-  // Main route
-  datasets.push({
-    label: "Route",
-    data: routeResampled,
-    borderColor: "#1976D2",
-    backgroundColor: "rgba(25, 118, 210, 0.1)",
-    borderWidth: 2,
-    pointRadius: 0,
-    fill: true
-  });
+  const routeSeries = normalizeSeries(
+    resampleSeries(distances, elevations)
+  );
 
-  // Reference climbs
-  const colors = [
-    "#E91E63", // pink
-    "#FF9800", // orange
-    "#4CAF50", // green
-    "#9C27B0", // purple
-    "#00BCD4"  // cyan
+  const datasets = [
+    {
+      label: "Route",
+      data: makePoints(routeSeries),
+      borderColor: "#1976D2",
+      backgroundColor: "rgba(25, 118, 210, 0.10)",
+      borderWidth: 2,
+      pointRadius: 0,
+      pointHoverRadius: 3,
+      fill: true,
+      tension: 0.15
+    }
   ];
 
-  climbs.forEach((climb, idx) => {
-    const color = colors[idx % colors.length];
+  const colors = [
+    "#E91E63",
+    "#FF9800",
+    "#4CAF50",
+    "#9C27B0",
+    "#00BCD4"
+  ];
 
-    // Build climb distance axis
-    const climbDistances = [];
-    const step = climb.distance_km / (climb.profile.length - 1);
-    for (let i = 0; i < climb.profile.length; i++) {
-      climbDistances.push(i * step);
+  climbs.forEach((climb, index) => {
+    if (!Array.isArray(climb.profile) || climb.profile.length === 0) {
+      return;
     }
 
-    const climbResampled = resampleSeries(climbDistances, climb.profile);
-  if (normalizeStart) {
-    // Normalize climb so its first non-null elevation is 0
-    let climbStart = null;
-    for (let i = 0; i < climbResampled.length; i++) {
-      if (climbResampled[i] != null) {
-        climbStart = climbResampled[i];
-        break;
-      }
+    const distanceKm = Number(climb.distance_km);
+
+    if (!Number.isFinite(distanceKm) || distanceKm <= 0) {
+      return;
     }
-  
-    if (climbStart != null) {
-      for (let i = 0; i < climbResampled.length; i++) {
-        if (climbResampled[i] != null) {
-          climbResampled[i] -= climbStart;
+
+    const profileDistances = Array.from(
+      { length: climb.profile.length },
+      (_, i) => {
+        if (climb.profile.length === 1) {
+          return 0;
         }
+
+        return (i / (climb.profile.length - 1)) * distanceKm;
       }
-    }
-  }
+    );
+
+    const climbSeries = normalizeSeries(
+      resampleSeries(profileDistances, climb.profile)
+    );
+
     datasets.push({
-      label: climb.name,
-      data: climbResampled,
-      borderColor: color,
+      label: climb.name || "Reference climb",
+      data: makePoints(climbSeries),
+      borderColor: colors[index % colors.length],
       backgroundColor: "transparent",
       borderWidth: 2,
       pointRadius: 0,
-      fill: false
+      pointHoverRadius: 3,
+      fill: false,
+      tension: 0.15
     });
   });
 
-  // 6. Create chart
   elevationChart = new Chart(ctx, {
     type: "line",
     data: {
-      labels,
       datasets
     },
     options: {
-      responsive: false,
+      responsive: true,
       maintainAspectRatio: false,
+      normalized: true,
+      interaction: {
+        mode: "nearest",
+        intersect: false
+      },
       plugins: {
-        legend: { position: "bottom" },
+        legend: {
+          position: "bottom"
+        },
         tooltip: {
           callbacks: {
-            label: ctx => {
-              const val = ctx.parsed.y;
-              if (val == null) return ctx.dataset.label + ": –";
-              return ctx.dataset.label + ": " + val.toFixed(0) + " m";
+            title: tooltipItems => {
+              const distance = tooltipItems[0]?.parsed?.x;
+
+              return Number.isFinite(distance)
+                ? `${distance.toFixed(2)} km`
+                : "";
+            },
+            label: tooltipContext => {
+              const elevation = tooltipContext.parsed.y;
+
+              return `${tooltipContext.dataset.label}: ${elevation.toFixed(0)} m`;
             }
           }
         }
       },
       scales: {
         x: {
-          title: { display: true, text: "Distance (km)" },
+          type: "linear",
           min: 0,
-          max: maxDistance
+          max: maxDistance,
+          title: {
+            display: true,
+            text: "Distance (km)"
+          },
+          ticks: {
+            maxTicksLimit: 6,
+            callback: value => `${Number(value).toFixed(1)} km`
+          }
         },
         y: {
-          title: { display: true, text: "Elevation (m)" }
+          title: {
+            display: true,
+            text: normalizeStart
+              ? "Elevation relative to start (m)"
+              : "Elevation (m)"
+          },
+          ticks: {
+            callback: value => `${value} m`
+          }
         }
       }
     }
   });
+}
+
+// =========================
+// Normalisation Check
+// =========================
+function isNormalizeStartEnabled() {
+  return Boolean(
+    normalizeStartCheckbox &&
+    normalizeStartCheckbox.checked
+  );
 }
 // =========================
 // Climb Toggles
@@ -594,9 +659,10 @@ function renderClimbToggles() {
       // Redraw chart with current route if it exists
       if (elevationChart && window.lastRouteChartState) {
         drawElevationChart(
-          window.lastRouteChartState.distances,
-          window.lastRouteChartState.elevations,
-          getActiveClimbs()
+          distances,
+          elevations,
+          getActiveClimbs(),
+          isNormalizeStartEnabled()
         );
       }
     });
