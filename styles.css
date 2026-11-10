@@ -43,6 +43,25 @@ button {
   font-size: 0.95rem;
 }
 
+.route-map {
+  height: 300px;
+  width: 100%;
+}
+
+.elevation-chart-container {
+  position: relative;
+  height: 300px; /* same as .route-map */
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.elevation-chart-container canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
 #route-section h2 {
   margin-bottom: 0.5rem;
 }
