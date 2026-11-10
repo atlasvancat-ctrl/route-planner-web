@@ -22,7 +22,7 @@
   </section>
 
   <section id="chart-options-section" style="display:none;">
-    <h2>Chart options</h2>
+    <h2> options</h2>
     <label style="display:flex; align-items:center; gap:0.5rem;">
       <input id="normalize-start-checkbox" type="checkbox" />
       Normalize start elevation (all profiles start at 0 m)
@@ -79,8 +79,10 @@
   
   <section id="route-section" style="display:none;">
     <h2>Route</h2>
-    <div id="map" style="height: 300px; width: 100%;"></div>
-    <canvas id="elevation-chart" width="600" height="250"></canvas>
+    <div id="map" class="route-map"></div>
+    <div class="elevation-chart-container">
+      <canvas id="elevation-chart"></canvas>
+    </div>
     <div id="summary"></div>
     <button id="edit-waypoints-btn">Edit waypoints</button>
   </section>
